@@ -3,7 +3,7 @@ import { Typography, Box, Collapse, Alert, Backdrop, CircularProgress, Button, D
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import moment from "moment-timezone";
-// import io from "socket.io-client"; 
+import io from "socket.io-client"; 
 import DataTable from '../DataTable';
 import AddRuleDialog from '../../components/AddRuleDialog/AddRuleDialog';
 import { SERVER_URL } from "../../consts";
@@ -11,7 +11,7 @@ import AuthContext from "../../contexts/AuthContext";
 import ReportCard from "../../components/ReportCard/ReportCard"; 
 import LoadingIndicator from "../../components/LoadingIndicator/LoadingIndicator"; 
 
-// import socket from "../../WebSocketClient"; // ✅ Import fixed WebSocket client
+const socket = io(SERVER_URL);
 const ReportTable = () => {
   const { user } = useContext(AuthContext);
   const [reports, setReports] = useState([]);
@@ -27,78 +27,207 @@ const ReportTable = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const locationCache = useRef(new Map()); // 🔥 Cache for location names
   const [selectedReport, setSelectedReport] = useState(null);
+  const [userInteracted, setUserInteracted] = useState(false);
+
+  // 🔊 Audio references for sound notifications
+  const reportAddedSound = useRef(new Audio("/sounds/reportAdded.mp3"));
+  const reportUpdatedSound = useRef(new Audio("/sounds/reportUpdated.mp3"));
+  const reportDeletedSound = useRef(new Audio("/sounds/reportDeleted.mp3"));
+
+  useEffect(() => {
+    const setupAudio = () => {
+      reportAddedSound.current = new Audio("/sounds/reportAdded.mp3");
+      reportUpdatedSound.current = new Audio("/sounds/reportUpdated.mp3");
+      reportDeletedSound.current = new Audio("/sounds/reportDeleted.mp3");
+  
+      // Force the browser to start loading the file
+      [reportAddedSound.current, reportUpdatedSound.current, reportDeletedSound.current].forEach(audio => {
+        audio.preload = "auto"; // Ensures file is preloaded
+        audio.load(); // Forces loading the audio
+      });
+  
+      console.log("🔊 Audio initialized:", {
+        added: reportAddedSound.current.readyState,
+        updated: reportUpdatedSound.current.readyState,
+        deleted: reportDeletedSound.current.readyState
+      });
+    };
+  
+    setupAudio();
+  }, []);
+  
+  
+useEffect(() => {
+  const unlockAudio = async () => {
+    setUserInteracted(true);
+
+    try {
+      // Attempt to play a silent sound to unlock autoplay
+      await reportUpdatedSound.current.play();
+      reportUpdatedSound.current.pause();
+      console.log("✅ Audio unlocked");
+    } catch (error) {
+      console.warn("🚨 Audio unlock failed:", error);
+    }
+
+    // Remove event listeners after first interaction
+    document.removeEventListener("click", unlockAudio);
+    document.removeEventListener("keydown", unlockAudio);
+    document.removeEventListener("touchstart", unlockAudio);
+  };
+
+  // Add event listeners for user interaction
+  document.addEventListener("click", unlockAudio, { once: true });
+  document.addEventListener("keydown", unlockAudio, { once: true });
+  document.addEventListener("touchstart", unlockAudio, { once: true });
+
+  return () => {
+    document.removeEventListener("click", unlockAudio);
+    document.removeEventListener("keydown", unlockAudio);
+    document.removeEventListener("touchstart", unlockAudio);
+  };
+}, []);
+
+  
+  
+
+  useEffect(() => {
+    if (user && user._id) {
+      socket.emit("registerUser", user._id);
+    }
+  }, [user]);
 
   const fetchReports = useCallback(async () => {
     if (!user || !user._id) return;
-
+  
+    const controller = new AbortController();
+    const signal = controller.signal;
+  
     try {
       setIsLoading(true);
       setError(null);
       
       let endpoint = `${SERVER_URL}/api/reports/report/user/${user._id}`;
-
-      // 🔥 Authority users fetch reports based on their assigned category
+  
       if (user.role === "authority") {
         endpoint = `${SERVER_URL}/api/reports/report/category/${user._id}`;
       }
-
-      const response = await axios.get(endpoint);
+  
+      const response = await axios.get(endpoint, { signal });
       if (response.status !== 200) {
         throw new Error("Failed to fetch reports");
       }
       const data = response.data;
-
+  
       if (Array.isArray(data.reports)) {
-        // 🔥 Parallelized location fetching
-        const locations = await Promise.all(data.reports.map(async (report) => ({
-          ...report,
-          location_name: await fetchLocationName(report.location_lat, report.location_long),
-          id: report._id,
-          created_at: report.created_at ? moment(report.created_at).format("YYYY-MM-DD HH:mm:ss") : "N/A",
-          updated_at: report.updated_at ? moment(report.updated_at).format("YYYY-MM-DD HH:mm:ss") : "N/A"
-        })));
-
-        setReports(locations);
+        const locationPromises = data.reports.map(async (report) => {
+          const location_name = await fetchLocationName(report.location_lat, report.location_long);
+          return {
+            ...report,
+            location_name,
+            id: report._id,
+            created_at: report.created_at ? moment(report.created_at).format("YYYY-MM-DD HH:mm:ss") : "N/A",
+            updated_at: report.updated_at ? moment(report.updated_at).format("YYYY-MM-DD HH:mm:ss") : "N/A",
+          };
+        });
+  
+        const locations = await Promise.allSettled(locationPromises);
+        setReports(locations.filter(p => p.status === "fulfilled").map(p => p.value));
       } else {
         setReports([]);
       }
     } catch (err) {
-      setError(err.message);
-      setOpenCollapse(true);
+      if (axios.isCancel(err)) {
+        console.log("Request canceled:", err.message);
+      } else {
+        setError(err.message);
+        setOpenCollapse(true);
+      }
     } finally {
       setIsLoading(false);
     }
+  
+    return () => controller.abort(); // Cleanup
   }, [user]);
+  
+
+    useEffect(() => {
+    socket.on("reportAdded", (newReport) => {
+      if (user?.role === "authority" && newReport.category === user.related_category) {
+        setMessage(`📢 A new report has been added! \n
+          Category: ${newReport.category} \n
+          Reported by: ${newReport.citizen_name}`);
+                  fetchReports();
+        setOpenCollapse(true);
+      }
+      setReports((prev) => [...prev, newReport]);
+      if (userInteracted) {
+        reportAddedSound.current.play().catch(err => console.error("Error playing sound:", err));
+      }    
+    });
+
+    socket.on("reportUpdated", (updatedReport) => {
+      // ✅ Notify authority users about the update if they are responsible for this category
+      if (user?.role === "authority" && updatedReport.category === user.related_category) {
+        setMessage(`📢 A report has been updated! \n
+          Category: ${updatedReport.category} \n
+          Updated by: ${updatedReport.citizen_name}`);
+        fetchReports(); // Refresh reports
+        setOpenCollapse(true);
+      }
+  
+      // ✅ Notify citizens if their report status is updated
+      if (user?.role === "citizen" && updatedReport.citizen_id === user._id) {
+        setMessage(`🔔 Your report status has been updated! \n
+          📌 Category: ${updatedReport.category || "Unknown Category"} > ${updatedReport.subcategory || "Unknown Subcategory"} \n
+          📝 Description: ${updatedReport.description || "No description provided"} \n
+          🔥 Priority: ${updatedReport.priority || "Not specified"} \n
+          ✅ New Status: ${updatedReport.status}`);
+        fetchReports();
+        setOpenCollapse(true);
+      }
+      // ✅ Update the state to reflect the new status
+      setReports((prev) =>
+        prev.map((report) =>
+          report._id === updatedReport.report_id
+            ? { ...report, status: updatedReport.status }
+            : report
+        )
+      );
+      // 🔥 Play sound only when user has interacted and audio is ready
+      if (userInteracted && reportUpdatedSound.current.readyState >= 2) {
+        console.log("🎵 Playing report updated sound...");
+        reportUpdatedSound.current.play().catch(err => console.error("❌ Error playing sound:", err));
+      } else {
+        console.warn("🚨 Sound not playing: userInteracted =", userInteracted, " | readyState =", reportUpdatedSound.current.readyState);
+      }
+    });
+
+    socket.on("reportDeleted", (deletedReportId) => {
+      if (user?.role === "authority") {
+        setMessage(`📢 A report has been deleted! \n
+        Category: ${deletedReportId.category} \n
+        Deleted by: ${deletedReportId.citizen_name}`);    
+        fetchReports();    
+        setOpenCollapse(true);
+      }
+      setReports((prev) => prev.filter((report) => report._id !== deletedReportId));
+      if (userInteracted) {
+        reportDeletedSound.current.play().catch(err => console.error("Error playing sound:", err));
+      }
+    });
+
+    return () => {
+      socket.off("reportAdded");
+      socket.off("reportUpdated");
+      socket.off("reportDeleted");
+    };
+  }, [user, fetchReports, userInteracted]);
 
   useEffect(() => {
     fetchReports();
   }, [fetchReports]);
 
-  // useEffect(() => {
-  //   socket.on("reportAdded", (newReport) => {
-  //     setReports((prev) => [...prev, newReport]);
-  //     setMessage("📢 A new report has been added!");
-  //     setOpenCollapse(true);
-  //   });
-
-  //   socket.on("reportUpdated", (updatedReport) => {
-  //     setReports((prev) => prev.map((r) => (r._id === updatedReport._id ? updatedReport : r)));
-  //     setMessage("📢 A report has been updated!");
-  //     setOpenCollapse(true);
-  //   });
-
-  //   socket.on("reportDeleted", (deletedReportId) => {
-  //     setReports((prev) => prev.filter((r) => r._id !== deletedReportId));
-  //     setMessage("📢 A report has been deleted!");
-  //     setOpenCollapse(true);
-  //   });
-
-  //   return () => {
-  //     socket.off("reportAdded");
-  //     socket.off("reportUpdated");
-  //     socket.off("reportDeleted");
-  //   };
-  // }, []);
 
   useEffect(() => {
     if (location.state?.message) {
@@ -333,9 +462,7 @@ const handleDelete = async (selectedIds) => {
             const errorData = await response.json();
             throw new Error(`Failed to delete report ${id}: ${errorData.error}`);
           }
-          // if (response.status === 200) {
-          //   socket.emit("reportDeleted", response.data.report); // 🔥 Emit event to server
-          // }
+
           return id; // Return deleted report ID for confirmation
         } catch (err) {
           console.error(`Error deleting report ${id}:`, err.message);
@@ -376,6 +503,16 @@ const handleDelete = async (selectedIds) => {
     setOpenBackdrop(false); // Hide loading indicator
   }
 };
+useEffect(() => {
+  if (message || error) {
+    setOpenCollapse(true); // Ensure the alert is visible when a message appears
+    const timer = setTimeout(() => {
+      setOpenCollapse(false);
+    }, 20000); // Auto-hide after 20 seconds
+
+    return () => clearTimeout(timer); // Cleanup function
+  }
+}, [message, error]);
 
   const handleStatusUpdate = (reportId, newStatus) => {
     setReports((prevReports) =>
@@ -414,7 +551,7 @@ const handleDelete = async (selectedIds) => {
         >
           {reports.length > 0 ? (
             reports.map((report) => (
-                <Box sx={{ display: "flex", justifyContent: "center", width: "75%" }}>
+                <Box key={report._id} sx={{ display: "flex", justifyContent: "center", width: "75%" }}>
                   <ReportCard report={report} user={user} onUpdateStatus={handleStatusUpdate} />
                 </Box>
             ))

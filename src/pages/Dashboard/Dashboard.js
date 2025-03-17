@@ -26,8 +26,11 @@ import SearchIcon from "@mui/icons-material/Search";
 import AccountCircle from "@mui/icons-material/AccountCircle";
 import InboxIcon from "@mui/icons-material/MoveToInbox";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem"; 
-//import SettingsIcon from "@mui/icons-material/Settings";
+import MailIcon from '@mui/icons-material/Mail';
 import Cookies from "js-cookie";
+import Badge from '@mui/material/Badge';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
 const drawerWidth = 240;
 
@@ -133,7 +136,6 @@ const Dashboard = ({ user, onLogout, children }) => {
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
-
   const toggleDrawer = () => {
     setOpen(!open);
   };
@@ -211,6 +213,22 @@ const Dashboard = ({ user, onLogout, children }) => {
             </SearchIconWrapper>
             <StyledInputBase placeholder="Search..." inputProps={{ "aria-label": "search" }} />
           </Search>
+          <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
+            <IconButton size="large" aria-label="show 4 new mails" color="inherit">
+              <Badge badgeContent={4} color="error">
+                <MailIcon />
+              </Badge>
+            </IconButton>
+            <IconButton
+              size="large"
+              aria-label="show 17 new notifications"
+              color="inherit"
+            >
+              <Badge badgeContent={17} color="error">
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+           </Box> 
           <IconButton
             size="large"
             edge="end"
@@ -231,18 +249,36 @@ const Dashboard = ({ user, onLogout, children }) => {
         </DrawerHeader>
         <Divider />
         <List>
-          {[
-            { text: "Reports", path: "/reports", icon: <InboxIcon /> },
-            { text: "Start Report", path: "/reports/api", icon: <ReportProblemIcon/>}
-          ].map(({ text, path, icon }) => (
-            <ListItem key={text} disablePadding>
-              <ListItemButton onClick={() => handleNavigation(path)}>
-                <ListItemIcon>{icon}</ListItemIcon>
-                <ListItemText primary={text} />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
+        {/* Common Menu Items for All Users */}
+        {[
+          { text: "Reports", path: "/reports", icon: <InboxIcon /> },
+        ].map(({ text, path, icon }) => (
+          <ListItem key={text} disablePadding>
+            <ListItemButton onClick={() => handleNavigation(path)}>
+              <ListItemIcon>{icon}</ListItemIcon>
+              <ListItemText primary={text} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+        {/* 🔥 Show "Start Report" ONLY if the user is an citizen */}
+        {user?.role !== "authority" && (
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => handleNavigation("/reports/api")}>
+              <ListItemIcon><ReportProblemIcon /></ListItemIcon>
+              <ListItemText primary="Start Report" />
+            </ListItemButton>
+          </ListItem>
+        )}
+        {/* 🔥 Show "Resolved Report" ONLY if the user is an authority */}
+        {user?.role === "authority" && (
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => handleNavigation("/reports/api/v1")}>
+              <ListItemIcon><CheckCircleIcon /></ListItemIcon>
+              <ListItemText primary="Resolved Report" />
+            </ListItemButton>
+          </ListItem>
+        )}
+      </List>
       </Drawer>
       <Box component="main" 
         sx={{
