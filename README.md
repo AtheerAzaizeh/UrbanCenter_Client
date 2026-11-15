@@ -1,70 +1,74 @@
-# Getting Started with Create React App
+# UrbanCenter — Civic Issue Reporting Platform (Client)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+UrbanCenter connects citizens with their city. A citizen reports a problem — a pothole, a broken streetlight, illegal dumping and more — with a photo and the exact location, and the responsible city department sees the report in real time, sets its priority and updates its status until it is resolved.
 
-## Available Scripts
+This repository contains the **React client**. The REST API and real-time server are in **[UrbanCenter_Server](https://github.com/AtheerAzaizeh/UrbanCenter_Server)**.
 
-In the project directory, you can run:
+---
 
-### `npm start`
+## Features
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **Two roles.** Citizens submit reports and follow their status. Authority users (city departments) see and handle only the reports in their own category.
+- **Three-step report wizard.** Report details (7 categories and 21 issue types, description, priority, location from the browser's geolocation), photo upload, and contact details, with validation on every step.
+- **Live reports table.** A Material UI Data Grid with colour-coded status and priority, image preview, and dialogs for updating or deleting a report.
+- **Real-time notifications with sound.** Over Socket.IO, a department is alerted the moment a new report arrives in its category, and a citizen is alerted when the status of their report changes.
+- **Readable addresses.** Coordinates are turned into street addresses with the OpenStreetMap Nominatim API.
+- **Resolved reports view.** Every resolved report with its comments and attached images.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Tech stack
 
-### `npm test`
+| Area | Technologies |
+| --- | --- |
+| UI | React 18, Material UI 6, MUI X Data Grid, Sass modules |
+| Routing & state | React Router 7, Redux Toolkit, React Context (auth & user) |
+| Data | Axios (REST), Socket.IO client (real time), OpenStreetMap Nominatim |
+| Tooling | Create React App |
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Screens
 
-### `npm run build`
+| Screen | What it does |
+| --- | --- |
+| Sign in / Sign up | Register as a citizen, or as an authority user for one report category |
+| Reports dashboard | Live table of reports with status, priority, location and image |
+| Start Report | The three-step wizard for submitting a new report |
+| Resolved Reports | Resolved reports together with their comments |
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Getting started
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+**Prerequisites:** Node.js 18+ and a running [UrbanCenter server](https://github.com/AtheerAzaizeh/UrbanCenter_Server).
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```bash
+git clone https://github.com/AtheerAzaizeh/UrbanCenter_Client.git
+cd UrbanCenter_Client
+npm install
+```
 
-### `npm run eject`
+Point the client at your server in `src/consts.js`:
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```js
+export const SERVER_URL = 'http://localhost:8080';
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Then start the development server:
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+```bash
+npm start
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+`npm run build` creates a production build in `build/`. In production the server serves this build from its `view/build` folder.
 
-## Learn More
+## Project structure
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```
+src/
+├── components/   # Report wizard, reports table, dialogs (update, delete, image upload/preview), loaders
+├── contexts/     # AuthContext and UserContext
+├── pages/        # Dashboard layout, sign-in, report page
+├── store/        # Redux store, actions, reducers and API calls
+├── consts.js     # Server URL
+└── App.js        # Routes and protected pages
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## Author
 
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+**Atheer Azaizeh** · [github.com/AtheerAzaizeh](https://github.com/AtheerAzaizeh)
